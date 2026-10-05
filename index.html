@@ -231,6 +231,12 @@ const cameraBtn = document.getElementById("cameraBtn");
    THREE.JS
 ========================================================= */
 
+const raycaster =
+    new THREE.Raycaster();
+
+const pointer =
+    new THREE.Vector2();
+
 const scene = new THREE.Scene();
 
 scene.background = new THREE.Color(0x171717);
@@ -254,6 +260,51 @@ camera.position.set(
     5.4,
     8.5
 );
+
+function updateCameraForScreen() {
+
+    const aspect =
+        window.innerWidth /
+        window.innerHeight;
+
+
+    if (aspect < 1) {
+
+    /*
+        Portrait phone
+    */
+
+    camera.fov = 70;
+
+    camera.position.set(
+        0,
+        5.8,
+        10
+    );
+
+} else {
+
+    /*
+        Landscape / PC
+    */
+
+    camera.fov = 45;
+
+    camera.position.set(
+        0,
+        5.4,
+        8.5
+    );
+}
+
+
+    camera.aspect =
+        aspect;
+
+    camera.updateProjectionMatrix();
+}
+
+updateCameraForScreen();
 
 
 const renderer = new THREE.WebGLRenderer({
@@ -638,7 +689,7 @@ function createBottle(style) {
             color: style.water,
             transparent: true,
             opacity: 0.65,
-            roughness: 0.05,
+            roughness: 0.2,
             transmission: 0.15
         });
 
@@ -930,41 +981,107 @@ function pointerDown(event) {
 
     if (flipping) return;
 
-    /*
-        Only allow interaction with
-        the current player's bottle.
-    */
 
     const rect =
         renderer.domElement.getBoundingClientRect();
 
 
-    const x =
-        event.clientX - rect.left;
+    pointer.x =
+        (
+            (event.clientX - rect.left)
+            / rect.width
+        ) * 2 - 1;
 
-    const y =
-        event.clientY - rect.top;
+    pointer.y =
+        -(
+            (event.clientY - rect.top)
+            / rect.height
+        ) * 2 + 1;
+
+
+    raycaster.setFromCamera(
+        pointer,
+        camera
+    );
 
 
     /*
-        Simple screen-side detection.
+        Check Player 1 bottle.
     */
 
-    const screenMiddle =
-        window.innerWidth / 2;
+    const hitsBottle1 =
+        raycaster.intersectObject(
+            bottle1,
+            true
+        );
 
+
+    /*
+        Check Player 2 bottle.
+    */
+
+    const hitsBottle2 =
+        raycaster.intersectObject(
+            bottle2,
+            true
+        );
+
+
+    /*
+        Decide which bottle was touched.
+    */
+
+    let touchedBottle = null;
+
+
+    if (hitsBottle1.length > 0) {
+
+        touchedBottle =
+            bottle1;
+
+    } else if (
+        hitsBottle2.length > 0
+    ) {
+
+        touchedBottle =
+            bottle2;
+
+    }
+
+
+    /*
+        Nothing was touched.
+    */
+
+    if (!touchedBottle) {
+        return;
+    }
+
+
+    /*
+        Only the current player's
+        bottle can be controlled.
+    */
 
     if (
         currentPlayer === 1 &&
-        x > screenMiddle
-    ) return;
+        touchedBottle !== bottle1
+    ) {
+        return;
+    }
 
 
     if (
         currentPlayer === 2 &&
-        x < screenMiddle
-    ) return;
+        touchedBottle !== bottle2
+    ) {
+        return;
+    }
 
+
+    /*
+        Start the swipe.
+    */
 
     swipeStart = {
         x: event.clientX,
@@ -973,9 +1090,11 @@ function pointerDown(event) {
     };
 
 
-    powerEl.style.opacity = "1";
+    powerEl.style.opacity =
+        "1";
 
-    powerBarEl.style.width = "0%";
+    powerBarEl.style.width =
+        "0%";
 }
 
 
@@ -1807,6 +1926,8 @@ window.addEventListener(
             window.innerWidth,
             window.innerHeight
         );
+
+        updateCameraForScreen();
     }
 );
 
