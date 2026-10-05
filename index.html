@@ -120,6 +120,28 @@ canvas {
     display: none;
     pointer-events: auto;
 }
+
+#cameraBtn {
+    position: absolute;
+    top: 15px;
+    right: 50px;
+    z-index: 20;
+
+    width: 48px;
+    height: 48px;
+
+    border: none;
+    border-radius: 50%;
+
+    background: rgba(0, 0, 0, 0.65);
+    color: white;
+
+    font-size: 22px;
+    cursor: pointer;
+
+    pointer-events: auto;
+    touch-action: manipulation;
+}
 </style>
 </head>
 
@@ -142,6 +164,8 @@ canvas {
         </div>
 
     </div>
+
+        <button id="cameraBtn">👁</button>
 
     <div id="turn">PLAYER 1'S TURN</div>
 
@@ -200,6 +224,7 @@ const powerEl = document.getElementById("power");
 const powerBarEl = document.getElementById("powerBar");
 
 const restartBtn = document.getElementById("restart");
+const cameraBtn = document.getElementById("cameraBtn");
 
 
 /* =========================================================
@@ -268,6 +293,8 @@ controls.enableDamping = true;
 
 controls.enablePan = false;
 
+controls.enabled = false;
+
 controls.minDistance = 6;
 
 controls.maxDistance = 12;
@@ -276,6 +303,22 @@ controls.minPolarAngle = 0.65;
 
 controls.maxPolarAngle = 1.35;
 
+cameraBtn.addEventListener(
+    "click",
+    () => {
+
+        cameraMode =
+            !cameraMode;
+
+        controls.enabled =
+            cameraMode;
+
+        cameraBtn.textContent =
+            cameraMode
+                ? "✕"
+                : "👁";
+    }
+);
 
 /* =========================================================
    LIGHTING
@@ -710,33 +753,61 @@ function createBottlePhysics(
             )
             .setCanSleep(true);
 
-
     const body =
         world.createRigidBody(
             bodyDesc
         );
 
-
     /*
-        Capsule collider gives the
-        bottle a simple physical shape.
+        Main bottle body.
+
+        Using a cuboid gives the physics body
+        a flat bottom so the bottle can settle
+        upright instead of balancing on a
+        rounded capsule.
     */
 
     const colliderDesc =
-        RAPIER.ColliderDesc.capsule(
+        RAPIER.ColliderDesc.cuboid(
+            0.43,
             0.78,
             0.43
         )
-        .setDensity(0.8)
+        .setDensity(0.65)
         .setFriction(0.65)
         .setRestitution(0.12);
-
 
     world.createCollider(
         colliderDesc,
         body
     );
 
+    /*
+        Heavy bottom / water mass.
+
+        This keeps extra weight concentrated
+        near the bottom of the bottle.
+    */
+
+    const bottomCollider =
+        RAPIER.ColliderDesc.cuboid(
+            0.38,
+            0.15,
+            0.38
+        )
+        .setTranslation(
+            0,
+            -0.51,
+            0
+        )
+        .setDensity(25.9)
+        .setFriction(0.65)
+        .setRestitution(0.10);
+
+    world.createCollider(
+        bottomCollider,
+        body
+    );
 
     return body;
 }
@@ -809,6 +880,11 @@ let lastBottleHeight = 0;
 
 let landingTimer = null;
 
+let cameraMode = false;
+
+let rotationAmount = 0;
+let lastRotationTime = 0;
+
 
 /* =========================================================
    TURN UI
@@ -829,6 +905,8 @@ function updateTurn() {
 ========================================================= */
 
 function pointerDown(event) {
+
+    if (cameraMode) return;
 
     if (flipping) return;
 
@@ -886,6 +964,8 @@ function pointerDown(event) {
 ========================================================= */
 
 function pointerMove(event) {
+    
+    if (cameraMode) return;
 
     if (!swipeStart) return;
 
@@ -913,6 +993,8 @@ function pointerMove(event) {
 ========================================================= */
 
 function pointerUp(event) {
+
+    if (cameraMode) return;
 
     if (!swipeStart) return;
 
@@ -1049,7 +1131,7 @@ function performFlip(
     const swipeStrength =
         Math.min(
             Math.max(
-                velocity * 2.5,
+                velocity * 2.6,
                 0.8
             ),
             3.2
@@ -1079,23 +1161,26 @@ function performFlip(
 
     activePhysics.setLinvel(
         {
-            x: horizontalForce * 1.2,
-            y: swipeStrength * 3.2,
+            x: horizontalForce * 1.0,
+            y: swipeStrength * 2.3,
             z: 0
         },
         true
     );
+
+    rotationAmount = 0;
+lastRotationTime = performance.now();
 
 
     /*
         Give the bottle spin.
 
         Faster swipe =
-        more rotation.
+        more rotation
     */
 
     const spin =
-        swipeStrength * 7;
+        swipeStrength * 1.5
 
 
     activePhysics.setAngvel(
@@ -1130,54 +1215,115 @@ function startLandingCheck() {
         landingTimer
     );
 
+    const landingStart =
+        performance.now();
+
+    let settledTime = 0;
 
     landingTimer =
         setInterval(() => {
 
             if (!activePhysics) return;
 
-
             const position =
                 activePhysics.translation();
-
 
             const velocity =
                 activePhysics.linvel();
 
+            const angularVelocity =
+                activePhysics.angvel();
 
-            /*
-                Wait until bottle is
-                coming back down.
-            */
+            const currentTime =
+                performance.now();
+
+            const deltaTime =
+                (currentTime - lastRotationTime) / 1000;
+
+            rotationAmount +=
+                Math.abs(
+                    angularVelocity.x
+                ) * deltaTime;
+
+            lastRotationTime =
+                currentTime;
 
             const falling =
                 velocity.y < 0;
 
-
-            /*
-                Table is around y = 0.
-                Bottle center is roughly
-                0.8 above the table when standing.
-            */
-
             const nearTable =
                 position.y < 1.05;
 
+            /*
+                Start checking for a settled landing
+                once the bottle reaches the table.
+            */
+
+            if (falling && nearTable) {
+
+                const speed =
+                    Math.sqrt(
+                        velocity.x ** 2 +
+                        velocity.y ** 2 +
+                        velocity.z ** 2
+                    );
+
+                const spin =
+                    Math.sqrt(
+                        angularVelocity.x ** 2 +
+                        angularVelocity.y ** 2 +
+                        angularVelocity.z ** 2
+                    );
+
+                const settled =
+                    speed < 0.15 &&
+                    spin < 0.15;
+
+                if (settled) {
+
+                    settledTime += 50;
+
+                    /*
+                        Bottle must stay almost completely
+                        still for 200ms before we judge it.
+                    */
+
+                    if (settledTime >= 200) {
+
+                        clearInterval(
+                            landingTimer
+                        );
+
+                        evaluateLanding();
+
+                    }
+
+                } else {
+
+                    settledTime = 0;
+
+                }
+
+            }
+
+            /*
+                Safety fallback.
+
+                If the bottle keeps moving for too long,
+                judge it anyway after 2.5 seconds.
+            */
 
             if (
-                falling &&
-                nearTable
+                currentTime -
+                landingStart >= 2500
             ) {
 
                 clearInterval(
                     landingTimer
                 );
 
+                evaluateLanding();
 
-                setTimeout(
-                    evaluateLanding,
-                    350
-                );
             }
 
         }, 50);
@@ -1190,12 +1336,11 @@ function startLandingCheck() {
 
 function evaluateLanding() {
 
-    if (!activePhysics) return;
 
+    if (!activePhysics) return;
 
     const rotation =
         activePhysics.rotation();
-
 
     /*
         Convert quaternion into
@@ -1209,7 +1354,6 @@ function evaluateLanding() {
             0
         );
 
-
     up.applyQuaternion(
         new THREE.Quaternion(
             rotation.x,
@@ -1219,31 +1363,32 @@ function evaluateLanding() {
         )
     );
 
-
     /*
-        If the bottle's up direction
-        is close to the world's up
-        direction, it landed upright.
+        Check if the bottle landed upright.
     */
 
     const upright =
-        up.y > 0.72;
+        up.y > 0.58;
+
+    const completedFlip =
+        rotationAmount >= Math.PI * 1.5;
 
 
-    if (upright) {
+    if (
+        upright &&
+        completedFlip
+    ) {
 
         scores[currentPlayer]++;
 
         updateScores();
-
 
         messageEl.textContent =
             "PERFECT FLIP! 🔥";
 
 
         /*
-            Give the bottle a tiny
-            settling movement.
+            Stop the bottle's movement.
         */
 
         activePhysics.setLinvel(
@@ -1255,7 +1400,6 @@ function evaluateLanding() {
             true
         );
 
-
         activePhysics.setAngvel(
             {
                 x: 0,
@@ -1266,7 +1410,23 @@ function evaluateLanding() {
         );
 
 
+        /*
+            Reset the bottle after
+            showing the successful landing.
+        */
+
         setTimeout(() => {
+
+            const x =
+                currentPlayer === 1
+                    ? -2.1
+                    : 2.1;
+
+            resetBottle(
+                activePhysics,
+                activeBottle,
+                x
+            );
 
             flipping = false;
 
@@ -1275,13 +1435,30 @@ function evaluateLanding() {
 
         }, 800);
 
+
     } else {
 
         messageEl.textContent =
             "MISSED!";
 
 
+        /*
+            Reset the bottle before
+            switching to the next player.
+        */
+
         setTimeout(() => {
+
+            const x =
+                currentPlayer === 1
+                    ? -2.1
+                    : 2.1;
+
+            resetBottle(
+                activePhysics,
+                activeBottle,
+                x
+            );
 
             switchPlayer();
 
@@ -1294,6 +1471,7 @@ function evaluateLanding() {
    SWITCH PLAYER
 ========================================================= */
 
+
 function switchPlayer() {
 
     currentPlayer =
@@ -1301,15 +1479,27 @@ function switchPlayer() {
         ? 2
         : 1;
 
-
     flipping = false;
 
     activeBottle = null;
-
     activePhysics = null;
+
+    // Reset both bottles upright
+    resetBottle(
+        physicsBottle1,
+        bottle1,
+        -2.1
+    );
+
+    resetBottle(
+        physicsBottle2,
+        bottle2,
+        2.1
+    );
 
     updateTurn();
 }
+
 
 
 /* =========================================================
@@ -1392,7 +1582,7 @@ restartBtn.addEventListener(
         updateTurn();
 
         restartBtn.style.display =
-            "none";
+            "non";
     }
 );
 
