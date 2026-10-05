@@ -429,12 +429,26 @@ centerLine.position.y =
 
 scene.add(centerLine);
 
+const BOTTLE_STYLES = {
+
+    blue: {
+        label: 0x1769aa,
+        water: 0x4fa8ff
+    },
+
+    red: {
+        label: 0xff3b30,
+        water: 0xff6b6b
+    }
+
+};
+
 
 /* =========================================================
    BOTTLE CREATION
 ========================================================= */
 
-function createBottle() {
+function createBottle(style) {
 
     const group =
         new THREE.Group();
@@ -587,7 +601,7 @@ function createBottle() {
 
     const labelMaterial =
         new THREE.MeshStandardMaterial({
-            color: 0x1769aa,
+            color: style.label,
             roughness: 0.65
         });
 
@@ -621,7 +635,7 @@ function createBottle() {
 
     const waterMaterial =
         new THREE.MeshPhysicalMaterial({
-            color: 0x4fa8ff,
+            color: style.water,
             transparent: true,
             opacity: 0.65,
             roughness: 0.05,
@@ -652,10 +666,14 @@ function createBottle() {
 ========================================================= */
 
 const bottle1 =
-    createBottle();
+    createBottle(
+        BOTTLE_STYLES.blue
+    );
 
 const bottle2 =
-    createBottle();
+    createBottle(
+        BOTTLE_STYLES.red
+    );
 
 
 const bottleHeight =
@@ -863,6 +881,8 @@ function syncBottle(
 
 let currentPlayer = 1;
 
+let computerThinking = false;
+
 let scores = {
     1: 0,
     2: 0
@@ -1061,6 +1081,82 @@ function pointerUp(event) {
     );
 }
 
+function computerFlip() {
+
+    if (
+        currentPlayer !== 2 ||
+        !computerThinking ||
+        flipping
+    ) {
+        return;
+    }
+
+    computerThinking = false;
+
+    flipping = true;
+
+    activeBottle =
+        bottle2;
+
+    activePhysics =
+        physicsBottle2;
+
+
+    /*
+        Give the computer a random
+        but controlled flip.
+    */
+
+    const swipeStrength =
+    3.2 +
+    Math.random() * 0.35;
+
+const horizontalForce =
+    -0.2 +
+    Math.random() * 0.4;
+
+
+    activePhysics.setLinvel(
+        {
+            x: horizontalForce * 1.2,
+            y: swipeStrength * 2.4,
+            z: 0
+        },
+        true
+    );
+
+
+    /*
+        Give the computer bottle spin.
+    */
+
+    const spin =
+        swipeStrength * 1.3;
+
+    activePhysics.setAngvel(
+        {
+            x: spin,
+            y: horizontalForce * 2,
+            z: 0
+        },
+        true
+    );
+
+
+    /*
+        Start tracking the flip exactly
+        like the human player's flip.
+    */
+
+    rotationAmount = 0;
+
+    lastRotationTime =
+        performance.now();
+
+
+    startLandingCheck();
+}
+
 
 /* =========================================================
    PERFORM FLIP
@@ -1071,6 +1167,9 @@ function performFlip(
     dy,
     velocity
 ) {
+    if (currentPlayer === 2) {
+    return;
+}
 
     if (flipping) return;
 
@@ -1430,8 +1529,28 @@ function evaluateLanding() {
 
             flipping = false;
 
-            messageEl.textContent =
-                "Flip again!";
+messageEl.textContent =
+    "Flip again!";
+
+
+/*
+    If the computer successfully flipped,
+    let it take another turn.
+*/
+
+if (
+    currentPlayer === 2
+) {
+
+    computerThinking = true;
+
+    setTimeout(() => {
+
+        computerFlip();
+
+    }, 1000);
+
+}
 
         }, 800);
 
@@ -1498,6 +1617,26 @@ function switchPlayer() {
     );
 
     updateTurn();
+
+
+    /*
+        If it is the computer's turn,
+        let the computer flip automatically.
+    */
+
+    if (
+        currentPlayer === 2
+    ) {
+
+        computerThinking = true;
+
+        setTimeout(() => {
+
+            computerFlip();
+
+        }, 1000);
+
+    }
 }
 
 
