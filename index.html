@@ -142,6 +142,140 @@ canvas {
     pointer-events: auto;
     touch-action: manipulation;
 }
+
+#winnerOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+
+    display: none;
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(0, 0, 0, 0.72);
+
+    pointer-events: auto;
+}
+
+#winnerPopup {
+    width: min(85vw, 360px);
+
+    padding: 30px 24px 25px;
+
+    border-radius: 24px;
+
+    background: rgba(25, 25, 25, 0.96);
+
+    text-align: center;
+
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.6);
+
+    transform: translateY(80px) scale(0.7);
+    opacity: 0;
+}
+
+#winnerOverlay.show #winnerPopup {
+    animation:
+        winnerEnter 0.65s
+        cubic-bezier(.17,.89,.32,1.28)
+        forwards;
+}
+
+#winnerTrophy {
+    font-size: 55px;
+    margin-bottom: 10px;
+
+    animation:
+        trophyPop 0.8s
+        0.35s
+        ease-out
+        both;
+}
+
+#winnerText {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+#winnerScore {
+    margin-top: 8px;
+
+    font-size: 12px;
+    letter-spacing: 2px;
+
+    opacity: 0.55;
+}
+
+#playAgain {
+    margin-top: 25px;
+
+    padding: 13px 28px;
+
+    border: none;
+    border-radius: 30px;
+
+    font-size: 14px;
+    font-weight: bold;
+
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+@keyframes winnerEnter {
+
+    0% {
+        transform:
+            translateY(80px)
+            scale(0.7);
+
+        opacity: 0;
+    }
+
+    60% {
+        transform:
+            translateY(-8px)
+            scale(1.05);
+
+        opacity: 1;
+    }
+
+    100% {
+        transform:
+            translateY(0)
+            scale(1);
+
+        opacity: 1;
+    }
+}
+
+@keyframes trophyPop {
+
+    0% {
+        transform:
+            scale(0)
+            rotate(-20deg);
+
+        opacity: 0;
+    }
+
+    70% {
+        transform:
+            scale(1.2)
+            rotate(8deg);
+
+        opacity: 1;
+    }
+
+    100% {
+        transform:
+            scale(1)
+            rotate(0deg);
+
+        opacity: 1;
+    }
+}
 </style>
 </head>
 
@@ -159,7 +293,7 @@ canvas {
         </div>
 
         <div class="player">
-            <div class="player-name">PLAYER 2</div>
+            <div class="player-name">COMPUTER</div>
             <div class="score" id="score2">0</div>
         </div>
 
@@ -177,9 +311,27 @@ canvas {
         Swipe upward on your bottle
     </div>
 
-    <button id="restart">
-        PLAY AGAIN
-    </button>
+   <div id="winnerOverlay">
+
+    <div id="winnerPopup">
+
+        <div id="winnerTrophy">🏆</div>
+
+        <div id="winnerText">
+            PLAYER 1 WINS!
+        </div>
+
+        <div id="winnerScore">
+            FINAL SCORE
+        </div>
+
+        <button id="playAgain">
+            PLAY AGAIN
+        </button>
+
+    </div>
+
+</div>
 
 </div>
 
@@ -223,8 +375,16 @@ const messageEl = document.getElementById("message");
 const powerEl = document.getElementById("power");
 const powerBarEl = document.getElementById("powerBar");
 
-const restartBtn = document.getElementById("restart");
+const restartBtn = document.getElementById("playAgain");
 const cameraBtn = document.getElementById("cameraBtn");
+
+const winnerOverlay = document.getElementById("winnerOverlay");
+
+const winnerText = document.getElementById("winnerText");
+
+const winnerScore = document.getElementById("winnerScore");
+
+const playAgain = document.getElementById("playAgain");
 
 
 /* =========================================================
@@ -934,6 +1094,8 @@ let currentPlayer = 1;
 
 let computerThinking = false;
 
+let winningScore = 5;
+
 let scores = {
     1: 0,
     2: 0
@@ -1231,14 +1393,14 @@ function computerFlip() {
     Math.random() * 0.35;
 
 const horizontalForce =
-    -0.2 +
+    -0.27 +
     Math.random() * 0.4;
 
 
     activePhysics.setLinvel(
         {
             x: horizontalForce * 1.2,
-            y: swipeStrength * 2.4,
+            y: swipeStrength * 2.44,
             z: 0
         },
         true
@@ -1250,7 +1412,7 @@ const horizontalForce =
     */
 
     const spin =
-        swipeStrength * 1.3;
+        swipeStrength * 1.29;
 
     activePhysics.setAngvel(
         {
@@ -1380,7 +1542,7 @@ function performFlip(
     activePhysics.setLinvel(
         {
             x: horizontalForce * 1.0,
-            y: swipeStrength * 2.3,
+            y: swipeStrength * 2.29,
             z: 0
         },
         true
@@ -1554,7 +1716,6 @@ function startLandingCheck() {
 
 function evaluateLanding() {
 
-
     if (!activePhysics) return;
 
     const rotation =
@@ -1592,6 +1753,10 @@ function evaluateLanding() {
         rotationAmount >= Math.PI * 1.5;
 
 
+    /*
+        SUCCESSFUL FLIP
+    */
+
     if (
         upright &&
         completedFlip
@@ -1600,6 +1765,59 @@ function evaluateLanding() {
         scores[currentPlayer]++;
 
         updateScores();
+
+
+        /*
+            Check if this successful flip
+            reached the winning score.
+        */
+
+        if (
+            scores[currentPlayer] >= winningScore
+        ) {
+
+            flipping = false;
+
+            computerThinking = false;
+
+            activePhysics.setLinvel({
+                x: 0,
+                y: 0,
+                z: 0
+            }, true);
+
+            activePhysics.setAngvel({
+                x: 0,
+                y: 0,
+                z: 0
+            }, true);
+
+            winnerText.textContent =
+                `PLAYER ${currentPlayer} WINS!`;
+
+            winnerScore.textContent =
+                `FINAL SCORE ${scores[currentPlayer]} - ${
+                    scores[
+                        currentPlayer === 1
+                            ? 2
+                            : 1
+                    ]
+                }`;
+
+            winnerOverlay.style.display =
+                "flex";
+
+            winnerOverlay.classList.add(
+                "show"
+            );
+
+            return;
+        }
+
+
+        /*
+            Normal successful flip.
+        */
 
         messageEl.textContent =
             "PERFECT FLIP! 🔥";
@@ -1648,33 +1866,37 @@ function evaluateLanding() {
 
             flipping = false;
 
-messageEl.textContent =
-    "Flip again!";
+            messageEl.textContent =
+                "Flip again!";
 
 
-/*
-    If the computer successfully flipped,
-    let it take another turn.
-*/
+            /*
+                If the computer successfully flipped,
+                let it take another turn.
+            */
 
-if (
-    currentPlayer === 2
-) {
+            if (
+                currentPlayer === 2
+            ) {
 
-    computerThinking = true;
+                computerThinking = true;
 
-    setTimeout(() => {
+                setTimeout(() => {
 
-        computerFlip();
+                    computerFlip();
 
-    }, 1000);
+                }, 1000);
 
-}
+            }
 
         }, 800);
 
 
     } else {
+
+        /*
+            FAILED FLIP
+        */
 
         messageEl.textContent =
             "MISSED!";
@@ -1701,7 +1923,9 @@ if (
             switchPlayer();
 
         }, 900);
+
     }
+
 }
 
 
@@ -1838,9 +2062,15 @@ restartBtn.addEventListener(
         updateScores();
 
         updateTurn();
+        winnerOverlay.classList.remove(
+    "show"
+);
+
+winnerOverlay.style.display =
+    "none";
 
         restartBtn.style.display =
-            "non";
+            "none";
     }
 );
 
